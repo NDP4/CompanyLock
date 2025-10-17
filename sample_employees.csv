@@ -1,0 +1,6 @@
+Username,FullName,Department,Role,IsActive,Password
+admin,System Administrator,IT,Admin,True,admin123
+john.doe,John Doe,Finance,User,True,password123
+jane.smith,Jane Smith,HR,User,True,password123
+mike.wilson,Mike Wilson,Operations,User,True,password123
+sarah.johnson,Sarah Johnson,IT,User,True,password123
