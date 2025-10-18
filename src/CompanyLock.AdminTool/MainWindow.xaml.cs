@@ -32,8 +32,15 @@ public partial class MainWindow : Window
         EmployeeDataGrid.ItemsSource = _employees;
         AuditLogsDataGrid.ItemsSource = _auditEvents;
         
+        // Initialize UI elements
+        StartDatePicker.SelectedDate = DateTime.Now.AddDays(-7); // Default to last week
+        EndDatePicker.SelectedDate = DateTime.Now;
+        
+        // Subscribe to events
+        AuditLogsDataGrid.SelectionChanged += AuditLogsDataGrid_SelectionChanged;
+        
         LoadEmployees();
-        LoadAuditLogs();
+        _ = LoadAuditLogs(); // Fire and forget for async method
     }
     
     private async void LoadEmployees()
@@ -62,7 +69,7 @@ public partial class MainWindow : Window
         }
     }
     
-    private async void LoadAuditLogs()
+    private async Task LoadAuditLogs()
     {
         try
         {
@@ -81,6 +88,10 @@ public partial class MainWindow : Window
             {
                 _auditEvents.Add(log);
             }
+            
+            // Update statistics and load event types
+            await UpdateLogStatistics();
+            await LoadEventTypes();
         }
         catch (Exception ex)
         {
@@ -292,9 +303,9 @@ public partial class MainWindow : Window
         LoadEmployees();
     }
     
-    private void RefreshLogsButton_Click(object sender, RoutedEventArgs e)
+    private async void RefreshLogsButton_Click(object sender, RoutedEventArgs e)
     {
-        LoadAuditLogs();
+        await LoadAuditLogs();
     }
     
     private void ExportLogsButton_Click(object sender, RoutedEventArgs e)
@@ -333,6 +344,265 @@ public partial class MainWindow : Window
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+    }
+    
+    // Log Management Event Handlers
+    private async void ClearAllLogsButton_Click(object sender, RoutedEventArgs e)
+    {
+        var result = MessageBox.Show(
+            "Are you sure you want to delete ALL audit logs? This action cannot be undone!",
+            "Confirm Clear All Logs",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+
+        if (result == MessageBoxResult.Yes)
+        {
+            try
+            {
+                LogStatusLabel.Text = "Clearing all logs...";
+                var deletedCount = await _authService.ClearAllLogsAsync();
+                
+                await LoadAuditLogs();
+                await UpdateLogStatistics();
+                
+                LogStatusLabel.Text = $"Successfully deleted {deletedCount} logs";
+                
+                MessageBox.Show($"Successfully deleted {deletedCount} audit logs",
+                    "Clear Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                LogStatusLabel.Text = "Error clearing logs";
+                MessageBox.Show($"Error clearing logs: {ex.Message}",
+                    "Clear Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+    }
+    
+    private async void CleanupOldLogsButton_Click(object sender, RoutedEventArgs e)
+    {
+        var result = MessageBox.Show(
+            "This will delete all audit logs older than 30 days. Continue?",
+            "Confirm Cleanup Old Logs",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+
+        if (result == MessageBoxResult.Yes)
+        {
+            try
+            {
+                LogStatusLabel.Text = "Cleaning up old logs...";
+                var deletedCount = await _authService.CleanupOldLogsAsync(30);
+                
+                await LoadAuditLogs();
+                await UpdateLogStatistics();
+                
+                LogStatusLabel.Text = $"Cleanup completed - deleted {deletedCount} old logs";
+                
+                MessageBox.Show($"Successfully deleted {deletedCount} old audit logs (older than 30 days)",
+                    "Cleanup Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                LogStatusLabel.Text = "Error during cleanup";
+                MessageBox.Show($"Error during cleanup: {ex.Message}",
+                    "Cleanup Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+    }
+    
+    private async void DeleteByDateButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (StartDatePicker.SelectedDate == null || EndDatePicker.SelectedDate == null)
+        {
+            MessageBox.Show("Please select both start and end dates",
+                "Date Range Required", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        
+        var startDate = StartDatePicker.SelectedDate.Value;
+        var endDate = EndDatePicker.SelectedDate.Value.AddDays(1).AddMilliseconds(-1); // End of day
+        
+        var result = MessageBox.Show(
+            $"Delete all logs from {startDate:dd/MM/yyyy} to {EndDatePicker.SelectedDate.Value:dd/MM/yyyy}?",
+            "Confirm Delete by Date Range",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+
+        if (result == MessageBoxResult.Yes)
+        {
+            try
+            {
+                LogStatusLabel.Text = "Deleting logs by date range...";
+                var deletedCount = await _authService.DeleteLogsByDateRangeAsync(startDate, endDate);
+                
+                await LoadAuditLogs();
+                await UpdateLogStatistics();
+                
+                LogStatusLabel.Text = $"Deleted {deletedCount} logs from date range";
+                
+                MessageBox.Show($"Successfully deleted {deletedCount} logs from selected date range",
+                    "Delete Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                LogStatusLabel.Text = "Error deleting logs by date";
+                MessageBox.Show($"Error deleting logs: {ex.Message}",
+                    "Delete Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+    }
+    
+    private async void DeleteByTypeButton_Click(object sender, RoutedEventArgs e)
+    {
+        var selectedEventType = EventTypeComboBox.SelectedItem?.ToString();
+        
+        if (string.IsNullOrEmpty(selectedEventType))
+        {
+            MessageBox.Show("Please select an event type",
+                "Event Type Required", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        
+        var result = MessageBox.Show(
+            $"Delete all logs of type '{selectedEventType}'?",
+            "Confirm Delete by Event Type",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+
+        if (result == MessageBoxResult.Yes)
+        {
+            try
+            {
+                LogStatusLabel.Text = "Deleting logs by event type...";
+                var deletedCount = await _authService.DeleteLogsByEventTypeAsync(selectedEventType);
+                
+                await LoadAuditLogs();
+                await UpdateLogStatistics();
+                await LoadEventTypes(); // Refresh event types
+                
+                LogStatusLabel.Text = $"Deleted {deletedCount} logs of type {selectedEventType}";
+                
+                MessageBox.Show($"Successfully deleted {deletedCount} logs of type '{selectedEventType}'",
+                    "Delete Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                LogStatusLabel.Text = "Error deleting logs by type";
+                MessageBox.Show($"Error deleting logs: {ex.Message}",
+                    "Delete Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+    }
+    
+    private async void DeleteSelectedLogsButton_Click(object sender, RoutedEventArgs e)
+    {
+        var selectedLogs = AuditLogsDataGrid.SelectedItems.Cast<AuditEvent>().ToList();
+        
+        if (!selectedLogs.Any())
+        {
+            MessageBox.Show("Please select one or more logs to delete",
+                "No Logs Selected", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        
+        var result = MessageBox.Show(
+            $"Delete {selectedLogs.Count} selected log(s)?",
+            "Confirm Delete Selected Logs",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+
+        if (result == MessageBoxResult.Yes)
+        {
+            try
+            {
+                LogStatusLabel.Text = "Deleting selected logs...";
+                
+                var config = ConfigurationManager.GetConfig();
+                using var context = new LocalDbContext($"Data Source={config.DatabasePath}");
+                
+                var logIds = selectedLogs.Select(l => l.Id).ToList();
+                var logsToDelete = context.AuditEvents.Where(e => logIds.Contains(e.Id));
+                
+                context.AuditEvents.RemoveRange(logsToDelete);
+                await context.SaveChangesAsync();
+                
+                await LoadAuditLogs();
+                await UpdateLogStatistics();
+                
+                LogStatusLabel.Text = $"Deleted {selectedLogs.Count} selected logs";
+                
+                MessageBox.Show($"Successfully deleted {selectedLogs.Count} selected logs",
+                    "Delete Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                LogStatusLabel.Text = "Error deleting selected logs";
+                MessageBox.Show($"Error deleting selected logs: {ex.Message}",
+                    "Delete Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+    }
+    
+    private async Task LoadEventTypes()
+    {
+        try
+        {
+            var config = ConfigurationManager.GetConfig();
+            using var context = new LocalDbContext($"Data Source={config.DatabasePath}");
+            
+            var eventTypes = await context.AuditEvents
+                .Select(e => e.EventType)
+                .Distinct()
+                .OrderBy(t => t)
+                .ToListAsync();
+            
+            EventTypeComboBox.Items.Clear();
+            foreach (var eventType in eventTypes)
+            {
+                EventTypeComboBox.Items.Add(eventType);
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Error loading event types: {ex.Message}",
+                "Load Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+    
+    private async Task UpdateLogStatistics()
+    {
+        try
+        {
+            var logCount = await _authService.GetLogCountAsync();
+            var dbSize = await _authService.GetDatabaseSizeAsync();
+            
+            LogCountLabel.Text = $"Total Logs: {logCount:N0}";
+            DatabaseSizeLabel.Text = $"Database Size: {FormatBytes(dbSize)}";
+            
+            // Update selected count
+            var selectedCount = AuditLogsDataGrid.SelectedItems.Count;
+            SelectedCountLabel.Text = $"Selected: {selectedCount} logs";
+        }
+        catch
+        {
+            LogCountLabel.Text = "Total Logs: Error";
+            DatabaseSizeLabel.Text = "Database Size: Error";
+        }
+    }
+    
+    private static string FormatBytes(long bytes)
+    {
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
+        if (bytes < 1024 * 1024 * 1024) return $"{bytes / (1024.0 * 1024.0):F1} MB";
+        return $"{bytes / (1024.0 * 1024.0 * 1024.0):F1} GB";
+    }
+    
+    private void AuditLogsDataGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        var selectedCount = AuditLogsDataGrid.SelectedItems.Count;
+        SelectedCountLabel.Text = $"Selected: {selectedCount} logs";
     }
     
     public class EmployeeCsvRecord

@@ -37,6 +37,8 @@
 - **Employee Management**: CRUD operations untuk data karyawan via AdminTool
 - **Audit Logging**: Pencatatan aktivitas sistem yang lengkap dengan timestamp
 - **CSV Import/Export**: Import data karyawan dari file `sample_employees.csv`
+- **Log Management**: Clear, bulk delete, filter by date/type, automatic cleanup
+- **Rolling Retention**: Automatic 30-day log retention untuk mencegah database bloat
 
 ### 🎨 User Interface
 
@@ -250,7 +252,19 @@ Tersedia berbagai script untuk testing:
 
 - `test_companylock.bat` - Basic functionality test
 - `test_new_timestamps.bat` - Timestamp & audit logging test
+- `test_log_management.bat` - **NEW!** Log management features testing
 - `uninstall_service.bat` - Service cleanup script
+
+### Log Management Features
+
+**NEW!** Comprehensive log management untuk mencegah database bloat:
+
+- **AdminTool**: Clear all, cleanup old, delete by date/type, bulk delete
+- **Agent Service**: Automatic 30-day rolling retention
+- **Statistics**: Real-time log count dan database size monitoring
+- **Safety**: Confirmation dialogs dan export backup capability
+
+Lihat [`LOG_MANAGEMENT_FEATURES.md`](LOG_MANAGEMENT_FEATURES.md) untuk dokumentasi lengkap.
 
 ### Security Implementation
 

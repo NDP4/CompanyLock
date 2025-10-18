@@ -45,16 +45,51 @@
                 <Grid Margin="10">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
                     
-                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
-                        <Button Name="ExportLogsButton" Content="Export Logs" Padding="10,5" Margin="0,0,10,0" Click="ExportLogsButton_Click"/>
-                        <Button Name="RefreshLogsButton" Content="Refresh" Padding="10,5" Click="RefreshLogsButton_Click"/>
+                    <!-- Log Management Controls -->
+                    <GroupBox Grid.Row="0" Header="Log Management" Margin="0,0,0,10">
+                        <Grid Margin="5">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            
+                            <!-- First row of controls -->
+                            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,5">
+                                <Button Name="ExportLogsButton" Content="Export Logs" Padding="10,5" Margin="0,0,10,0" Click="ExportLogsButton_Click"/>
+                                <Button Name="RefreshLogsButton" Content="Refresh" Padding="10,5" Margin="0,0,20,0" Click="RefreshLogsButton_Click"/>
+                                <Button Name="ClearAllLogsButton" Content="Clear All Logs" Padding="10,5" Margin="0,0,10,0" Click="ClearAllLogsButton_Click" Background="LightCoral"/>
+                                <Button Name="CleanupOldLogsButton" Content="Cleanup Old Logs" Padding="10,5" Margin="0,0,10,0" Click="CleanupOldLogsButton_Click" Background="LightBlue"/>
+                            </StackPanel>
+                            
+                            <!-- Second row of controls -->
+                            <StackPanel Grid.Row="1" Orientation="Horizontal">
+                                <TextBlock Text="Filter by Date:" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                                <DatePicker Name="StartDatePicker" Width="120" Margin="0,0,5,0"/>
+                                <TextBlock Text="to" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                                <DatePicker Name="EndDatePicker" Width="120" Margin="0,0,10,0"/>
+                                <Button Name="DeleteByDateButton" Content="Delete by Date Range" Padding="10,5" Margin="0,0,10,0" Click="DeleteByDateButton_Click" Background="Orange"/>
+                                
+                                <TextBlock Text="Event Type:" VerticalAlignment="Center" Margin="10,0,5,0"/>
+                                <ComboBox Name="EventTypeComboBox" Width="120" Margin="0,0,5,0"/>
+                                <Button Name="DeleteByTypeButton" Content="Delete by Type" Padding="10,5" Margin="0,0,10,0" Click="DeleteByTypeButton_Click" Background="Orange"/>
+                            </StackPanel>
+                        </Grid>
+                    </GroupBox>
+                    
+                    <!-- Log Statistics -->
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,10">
+                        <TextBlock Name="LogCountLabel" Text="Total Logs: 0" Margin="0,0,20,0" FontWeight="Bold"/>
+                        <TextBlock Name="DatabaseSizeLabel" Text="Database Size: 0 KB" Margin="0,0,20,0" FontWeight="Bold"/>
+                        <TextBlock Name="LastCleanupLabel" Text="Last Cleanup: Never" Margin="0,0,20,0"/>
                     </StackPanel>
                     
-                    <DataGrid Name="AuditLogsDataGrid" Grid.Row="1" AutoGenerateColumns="False" 
-                              CanUserAddRows="False" IsReadOnly="True">
+                    <DataGrid Name="AuditLogsDataGrid" Grid.Row="2" AutoGenerateColumns="False" 
+                              CanUserAddRows="False" IsReadOnly="True" SelectionMode="Extended">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Timestamp" Binding="{Binding Timestamp, StringFormat={}{0:dd/MM/yyyy HH:mm:ss}}" Width="140"/>
                             <DataGridTextColumn Header="Event Type" Binding="{Binding EventType}" Width="120"/>
@@ -63,6 +98,13 @@
                             <DataGridTextColumn Header="Description" Binding="{Binding Description}" Width="*"/>
                         </DataGrid.Columns>
                     </DataGrid>
+                    
+                    <!-- Selected logs management -->
+                    <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,10,0,0">
+                        <Button Name="DeleteSelectedLogsButton" Content="Delete Selected Logs" Padding="10,5" Margin="0,0,10,0" Click="DeleteSelectedLogsButton_Click" Background="Tomato"/>
+                        <TextBlock Name="SelectedCountLabel" Text="Selected: 0 logs" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                        <TextBlock Name="LogStatusLabel" Text="Ready" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                    </StackPanel>
                 </Grid>
             </TabItem>
         </TabControl>

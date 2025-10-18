@@ -15,6 +15,7 @@ public class AgentWorker : BackgroundService
     private readonly IdleMonitorService _idleMonitor;
     private readonly HotkeyService _hotkeyService;
     private readonly PipeServerService _pipeServer;
+    private readonly LogCleanupService _logCleanup;
     private volatile bool _isLockScreenActive = false;
     private readonly object _lockStateLock = new object();
     
@@ -33,6 +34,9 @@ public class AgentWorker : BackgroundService
         _idleMonitor = idleMonitor;
         _hotkeyService = hotkeyService;
         _pipeServer = pipeServer;
+        
+        // Initialize log cleanup service with 30 days retention
+        _logCleanup = new LogCleanupService(_authService, 30);
     }
     
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -56,7 +60,12 @@ public class AgentWorker : BackgroundService
             _hotkeyService.Start();
             _pipeServer.Start();
             
+            // Start log cleanup service
+            _logger.Information("Starting automatic log cleanup service (30 days retention)");
+            _ = Task.Run(() => _logCleanup.StartAsync(stoppingToken), stoppingToken);
+            
             Console.WriteLine("[CompanyLock] Security monitoring active - Hotkey: Ctrl+Alt+L | Idle timeout: 1 minute");
+            Console.WriteLine("[CompanyLock] Automatic log cleanup enabled - 30 days retention");
             
             _logger.Information("CompanyLock Agent Service started successfully");
             
@@ -306,6 +315,13 @@ public class AgentWorker : BackgroundService
         _idleMonitor?.Stop();
         _hotkeyService?.Stop();
         _pipeServer?.Stop();
+        
+        // Stop log cleanup service
+        if (_logCleanup != null)
+        {
+            await _logCleanup.StopAsync(cancellationToken);
+            _logger.Information("Log cleanup service stopped");
+        }
         
         await base.StopAsync(cancellationToken);
         

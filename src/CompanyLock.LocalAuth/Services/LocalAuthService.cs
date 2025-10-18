@@ -242,4 +242,165 @@ public class LocalAuthService
             _logger.Error(ex, "Failed to invalidate session {SessionUuid}", sessionUuid);
         }
     }
+    
+    // Log Management Methods
+    public async Task<int> ClearAllLogsAsync()
+    {
+        try
+        {
+            using var context = new LocalDbContext(_connectionString);
+            var count = await context.AuditEvents.CountAsync();
+            context.AuditEvents.RemoveRange(context.AuditEvents);
+            await context.SaveChangesAsync();
+            
+            _logger.Information("Cleared all audit logs ({Count} records)", count);
+            return count;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "Failed to clear all logs");
+            return 0;
+        }
+    }
+    
+    public async Task<int> DeleteLogsByDateRangeAsync(DateTime startDate, DateTime endDate)
+    {
+        try
+        {
+            using var context = new LocalDbContext(_connectionString);
+            var logsToDelete = context.AuditEvents
+                .Where(e => e.Timestamp >= startDate && e.Timestamp <= endDate);
+            
+            var count = await logsToDelete.CountAsync();
+            context.AuditEvents.RemoveRange(logsToDelete);
+            await context.SaveChangesAsync();
+            
+            _logger.Information("Deleted {Count} audit logs from {StartDate} to {EndDate}", 
+                count, startDate, endDate);
+            return count;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "Failed to delete logs by date range");
+            return 0;
+        }
+    }
+    
+    public async Task<int> DeleteLogsByEventTypeAsync(string eventType)
+    {
+        try
+        {
+            using var context = new LocalDbContext(_connectionString);
+            var logsToDelete = context.AuditEvents
+                .Where(e => e.EventType == eventType);
+            
+            var count = await logsToDelete.CountAsync();
+            context.AuditEvents.RemoveRange(logsToDelete);
+            await context.SaveChangesAsync();
+            
+            _logger.Information("Deleted {Count} audit logs of type {EventType}", count, eventType);
+            return count;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "Failed to delete logs by event type");
+            return 0;
+        }
+    }
+    
+    public async Task<int> DeleteLogsByUsernameAsync(string username)
+    {
+        try
+        {
+            using var context = new LocalDbContext(_connectionString);
+            
+            // Get employee by username first
+            var employee = await context.Employees
+                .FirstOrDefaultAsync(e => e.Username == username);
+                
+            if (employee == null)
+            {
+                _logger.Warning("Employee with username {Username} not found", username);
+                return 0;
+            }
+            
+            var logsToDelete = context.AuditEvents
+                .Where(e => e.EmployeeId == employee.Id);
+            
+            var count = await logsToDelete.CountAsync();
+            context.AuditEvents.RemoveRange(logsToDelete);
+            await context.SaveChangesAsync();
+            
+            _logger.Information("Deleted {Count} audit logs for user {Username}", count, username);
+            return count;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "Failed to delete logs by username");
+            return 0;
+        }
+    }
+    
+    public async Task<int> CleanupOldLogsAsync(int retentionDays = 30)
+    {
+        try
+        {
+            using var context = new LocalDbContext(_connectionString);
+            var cutoffDate = DateTime.Now.AddDays(-retentionDays);
+            
+            var oldLogs = context.AuditEvents
+                .Where(e => e.Timestamp < cutoffDate);
+            
+            var count = await oldLogs.CountAsync();
+            
+            if (count > 0)
+            {
+                context.AuditEvents.RemoveRange(oldLogs);
+                await context.SaveChangesAsync();
+                
+                _logger.Information("Cleaned up {Count} old audit logs (older than {Days} days)", 
+                    count, retentionDays);
+            }
+            
+            return count;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "Failed to cleanup old logs");
+            return 0;
+        }
+    }
+    
+    public async Task<long> GetLogCountAsync()
+    {
+        try
+        {
+            using var context = new LocalDbContext(_connectionString);
+            return await context.AuditEvents.CountAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "Failed to get log count");
+            return 0;
+        }
+    }
+    
+    public async Task<long> GetDatabaseSizeAsync()
+    {
+        try
+        {
+            var dbPath = _connectionString.Split("Data Source=")[1].Split(";")[0];
+            if (File.Exists(dbPath))
+            {
+                var fileInfo = new FileInfo(dbPath);
+                return fileInfo.Length;
+            }
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "Failed to get database size");
+            return 0;
+        }
+    }
 }
