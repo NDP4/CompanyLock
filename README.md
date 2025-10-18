@@ -23,6 +23,8 @@
 - **Password Hashing**: Menggunakan Argon2 untuk keamanan password yang tinggi
 - **Enkripsi Data**: Windows DPAPI untuk proteksi data sensitif
 - **Kontrol Akses**: Sistem role-based dengan level User dan Admin
+- **Enhanced Lock Security**: Alt+F4, Alt+Tab, Windows key blocking
+- **Bypass Prevention**: Multi-layer security mencegah task switching dan window manipulation
 
 ### 🖥️ Monitoring & Kontrol
 
@@ -253,6 +255,7 @@ Tersedia berbagai script untuk testing:
 - `test_companylock.bat` - Basic functionality test
 - `test_new_timestamps.bat` - Timestamp & audit logging test
 - `test_log_management.bat` - **NEW!** Log management features testing
+- `test_security_features.bat` - **NEW!** Enhanced security bypass prevention testing
 - `uninstall_service.bat` - Service cleanup script
 
 ### Log Management Features
@@ -265,6 +268,17 @@ Tersedia berbagai script untuk testing:
 - **Safety**: Confirmation dialogs dan export backup capability
 
 Lihat [`LOG_MANAGEMENT_FEATURES.md`](LOG_MANAGEMENT_FEATURES.md) untuk dokumentasi lengkap.
+
+### Enhanced Security Features
+
+**NEW!** Advanced bypass prevention untuk lock screen security:
+
+- **Keyboard Hooks**: Global Alt+F4, Alt+Tab, Windows key blocking
+- **Window Security**: Taskbar hiding, topmost enforcement, manipulation prevention
+- **Multi-layer Protection**: Hook level + window level + continuous monitoring
+- **Real-time Logging**: Semua security events ter-log untuk audit
+
+Lihat [`ENHANCED_SECURITY_DOCUMENTATION.md`](ENHANCED_SECURITY_DOCUMENTATION.md) untuk detail lengkap.
 
 ### Security Implementation
 

@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
 using CompanyLock.Core.Models;
+using CompanyLock.UI.Services;
 
 namespace CompanyLock.UI;
 
@@ -13,10 +14,16 @@ public partial class LockScreen : Window
     private readonly DispatcherTimer _timeTimer;
     private readonly string _pipeName = "CompanyLockPipe";
     private string _deviceUuid = string.Empty;
+    private readonly SecurityEnforcementService _securityService;
+    private readonly SecureWindowService _windowService;
     
     public LockScreen()
     {
         InitializeComponent();
+        
+        // Initialize security services
+        _securityService = new SecurityEnforcementService();
+        _windowService = new SecureWindowService();
         
         _timeTimer = new DispatcherTimer();
         _timeTimer.Interval = TimeSpan.FromSeconds(1);
@@ -26,7 +33,16 @@ public partial class LockScreen : Window
         _deviceUuid = GetDeviceUuid();
         
         // Focus on username field
-        Loaded += (s, e) => UsernameTextBox.Focus();
+        Loaded += (s, e) => {
+            UsernameTextBox.Focus();
+            // Enable security mode when window is loaded
+            EnableSecurityMode();
+        };
+        
+        // Handle window closing
+        Closing += (s, e) => {
+            DisableSecurityMode();
+        };
         
         // Prevent Alt+Tab and other escape methods
         PreviewKeyDown += LockScreen_PreviewKeyDown;
@@ -225,6 +241,95 @@ public partial class LockScreen : Window
             StatusMessage.Text = "System is secured. Authentication required.";
             UnlockButton.Content = "🔓 UNLOCK WORKSTATION";
         }
+    }
+    
+    private void EnableSecurityMode()
+    {
+        try
+        {
+            _securityService.EnableSecurityMode();
+            _windowService.EnableSecureMode(this);
+            
+            // Ensure window properties are set correctly for security
+            this.Topmost = true;
+            this.WindowState = WindowState.Maximized;
+            this.WindowStyle = WindowStyle.None;
+            this.ResizeMode = ResizeMode.NoResize;
+            this.ShowInTaskbar = false;
+            
+            Console.WriteLine("[Security] Lock screen security enabled");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Security] Error enabling security mode: {ex.Message}");
+        }
+    }
+    
+    private void DisableSecurityMode()
+    {
+        try
+        {
+            _securityService.DisableSecurityMode();
+            _windowService.DisableSecureMode();
+            
+            Console.WriteLine("[Security] Lock screen security disabled");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Security] Error disabling security mode: {ex.Message}");
+        }
+    }
+    
+    // Enhanced key handling for security
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        // Block specific key combinations that might be missed by the hook
+        if (e.Key == Key.F4 && (Keyboard.Modifiers & ModifierKeys.Alt) == ModifierKeys.Alt)
+        {
+            e.Handled = true;
+            Console.WriteLine("[Security] Blocked Alt+F4 at window level");
+            return;
+        }
+        
+        if (e.Key == Key.Tab && (Keyboard.Modifiers & ModifierKeys.Alt) == ModifierKeys.Alt)
+        {
+            e.Handled = true;
+            Console.WriteLine("[Security] Blocked Alt+Tab at window level");
+            return;
+        }
+        
+        if (e.Key == Key.Escape && (Keyboard.Modifiers & ModifierKeys.Alt) == ModifierKeys.Alt)
+        {
+            e.Handled = true;
+            Console.WriteLine("[Security] Blocked Alt+Esc at window level");
+            return;
+        }
+        
+        if (e.Key == Key.LWin || e.Key == Key.RWin)
+        {
+            e.Handled = true;
+            Console.WriteLine("[Security] Blocked Windows key at window level");
+            return;
+        }
+        
+        base.OnKeyDown(e);
+    }
+    
+    // Override window proc for additional security
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        
+        // Ensure window stays on top
+        var timer = new DispatcherTimer();
+        timer.Interval = TimeSpan.FromSeconds(1);
+        timer.Tick += (s, args) => {
+            if (_windowService.IsSecureMode)
+            {
+                _windowService.EnsureWindowStaysOnTop();
+            }
+        };
+        timer.Start();
     }
     
     private class PipeResponse

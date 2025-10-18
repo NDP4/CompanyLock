@@ -1,0 +1,470 @@
+using Microsoft.EntityFrameworkCore;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using CompanyLock.Core.Models;
+using CompanyLock.Core.Security;
+using CompanyLock.LocalAuth.Data;
+using Serilog;
+
+namespace CompanyLock.Core.Services;
+
+public class EmergencyRecoveryService
+{
+    private readonly string _connectionString;
+    private readonly Serilog.ILogger _logger;
+    
+    public EmergencyRecoveryService(string connectionString)
+    {
+        _connectionString = connectionString;
+        _logger = Core.Logging.LoggerFactory.GetLogger();
+    }
+    
+    // Master Key Management
+    public async Task<string> GenerateMasterKeyAsync(string createdBy, string description = "System Master Key")
+    {
+        try
+        {
+            using var context = new LocalDbContext(_connectionString);
+            
+            // Generate a strong master key
+            var masterKeyBytes = new byte[64]; // 512-bit key
+            using (var rng = RandomNumberGenerator.Create())
+            {
+                rng.GetBytes(masterKeyBytes);
+            }
+            
+            var masterKeyB64 = Convert.ToBase64String(masterKeyBytes);
+            var keyId = GenerateKeyId();
+            
+            // Encrypt the master key with DPAPI
+            var encryptedMasterKey = DpapiHelper.ProtectString(masterKeyB64);
+            
+            var recoveryKey = new EmergencyRecoveryKey
+            {
+                KeyId = keyId,
+                EncryptedMasterKey = encryptedMasterKey,
+                CreatedBy = createdBy,
+                Description = description,
+                KeyType = "MASTER",
+                ExpiresAt = DateTime.Now.AddDays(90), // 3 months validity
+                MaxUsages = -1 // Unlimited usage
+            };
+            
+            context.EmergencyRecoveryKeys.Add(recoveryKey);
+            await context.SaveChangesAsync();
+            
+            // Audit log
+            await LogRecoveryActionAsync("MASTER_KEY_CREATED", null, createdBy, 
+                $"Master key {keyId} created", keyId);
+            
+            _logger.Information("Master recovery key created: {KeyId} by {CreatedBy}", keyId, createdBy);
+            
+            return keyId;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "Failed to generate master key");
+            throw;
+        }
+    }
+    
+    public async Task<USBRecoveryToken> GenerateUSBTokenAsync(string createdBy, bool isOneTimeUse = true)
+    {
+        try
+        {
+            var tokenId = GenerateKeyId("USB");
+            var tokenData = new
+            {
+                TokenId = tokenId,
+                CreatedBy = createdBy,
+                CreatedAt = DateTime.Now,
+                ExpiresAt = DateTime.Now.AddDays(30),
+                IsOneTimeUse = isOneTimeUse,
+                Capabilities = new[] { "PASSWORD_RESET", "ACCOUNT_UNLOCK" }
+            };
+            
+            var tokenJson = JsonSerializer.Serialize(tokenData);
+            var encryptedData = DpapiHelper.ProtectString(tokenJson);
+            
+            var usbToken = new USBRecoveryToken
+            {
+                TokenId = tokenId,
+                EncryptedData = encryptedData,
+                CreatedBy = createdBy,
+                IsOneTimeUse = isOneTimeUse,
+                MaxUsages = isOneTimeUse ? 1 : 10
+            };
+            
+            // Also store in database for tracking
+            using var context = new LocalDbContext(_connectionString);
+            var recoveryKey = new EmergencyRecoveryKey
+            {
+                KeyId = tokenId,
+                EncryptedMasterKey = encryptedData,
+                CreatedBy = createdBy,
+                Description = $"USB Recovery Token - {(isOneTimeUse ? "One-time use" : "Multi-use")}",
+                KeyType = "USB_TOKEN",
+                ExpiresAt = DateTime.Now.AddDays(30),
+                MaxUsages = isOneTimeUse ? 1 : 10
+            };
+            
+            context.EmergencyRecoveryKeys.Add(recoveryKey);
+            await context.SaveChangesAsync();
+            
+            await LogRecoveryActionAsync("USB_TOKEN_CREATED", null, createdBy, 
+                $"USB token {tokenId} created", tokenId);
+            
+            _logger.Information("USB recovery token created: {TokenId} by {CreatedBy}", tokenId, createdBy);
+            
+            return usbToken;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "Failed to generate USB token");
+            throw;
+        }
+    }
+    
+    public async Task<bool> ValidateRecoveryKeyAsync(string keyId)
+    {
+        try
+        {
+            using var context = new LocalDbContext(_connectionString);
+            
+            var key = await context.EmergencyRecoveryKeys
+                .FirstOrDefaultAsync(k => k.KeyId == keyId && k.IsActive);
+                
+            if (key == null) return false;
+            
+            // Check expiry
+            if (key.ExpiresAt.HasValue && key.ExpiresAt < DateTime.Now)
+            {
+                return false;
+            }
+            
+            // Check usage limits
+            if (key.MaxUsages > 0 && key.UsageCount >= key.MaxUsages)
+            {
+                return false;
+            }
+            
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "Failed to validate recovery key");
+            return false;
+        }
+    }
+    
+    public async Task<string> InitiatePasswordResetAsync(string targetUsername, string requestedBy, string recoveryKeyId, string reason = "Emergency password reset")
+    {
+        try
+        {
+            using var context = new LocalDbContext(_connectionString);
+            
+            // Validate recovery key
+            if (!await ValidateRecoveryKeyAsync(recoveryKeyId))
+            {
+                throw new UnauthorizedAccessException("Invalid or expired recovery key");
+            }
+            
+            // Check if target user exists
+            var employee = await context.Employees
+                .FirstOrDefaultAsync(e => e.Username == targetUsername);
+                
+            if (employee == null)
+            {
+                throw new ArgumentException($"User {targetUsername} not found");
+            }
+            
+            var sessionId = Guid.NewGuid().ToString();
+            
+            // Create recovery session
+            var recoverySession = new EmergencyRecoverySession
+            {
+                SessionId = sessionId,
+                RecoveryKeyId = context.EmergencyRecoveryKeys.First(k => k.KeyId == recoveryKeyId).Id,
+                TargetUsername = targetUsername,
+                InitiatedBy = requestedBy,
+                RecoveryType = "PASSWORD_RESET",
+                Notes = reason
+            };
+            
+            // Create password reset request
+            var resetRequest = new PasswordResetRequest
+            {
+                Username = targetUsername,
+                RequestedBy = requestedBy,
+                Reason = reason,
+                Status = "APPROVED", // Auto-approved for emergency recovery
+                ApprovedBy = "SYSTEM_EMERGENCY",
+                ApprovedAt = DateTime.Now,
+                RecoveryMethod = "EMERGENCY_KEY"
+            };
+            
+            context.EmergencyRecoverySessions.Add(recoverySession);
+            context.PasswordResetRequests.Add(resetRequest);
+            await context.SaveChangesAsync();
+            
+            // Link them
+            resetRequest.EmergencySessionId = recoverySession.Id;
+            await context.SaveChangesAsync();
+            
+            await LogRecoveryActionAsync("PASSWORD_RESET_INITIATED", targetUsername, requestedBy, 
+                $"Emergency password reset initiated for {targetUsername}", recoveryKeyId);
+            
+            _logger.Information("Password reset initiated for {Username} by {RequestedBy} using key {KeyId}", 
+                targetUsername, requestedBy, recoveryKeyId);
+            
+            return sessionId;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "Failed to initiate password reset");
+            throw;
+        }
+    }
+    
+    public async Task<bool> CompletePasswordResetAsync(string sessionId, string newPassword)
+    {
+        try
+        {
+            using var context = new LocalDbContext(_connectionString);
+            
+            var session = await context.EmergencyRecoverySessions
+                .Include(s => s.RecoveryKey)
+                .FirstOrDefaultAsync(s => s.SessionId == sessionId && s.Status == "PENDING");
+                
+            if (session == null)
+            {
+                return false;
+            }
+            
+            var employee = await context.Employees
+                .FirstOrDefaultAsync(e => e.Username == session.TargetUsername);
+                
+            if (employee == null)
+            {
+                return false;
+            }
+            
+            // Update password
+            var (hash, salt) = PasswordHasher.HashPassword(newPassword);
+            employee.PasswordHash = hash;
+            employee.Salt = salt;
+            
+            // Mark session as completed
+            session.Status = "COMPLETED";
+            session.CompletedAt = DateTime.Now;
+            
+            // Update recovery key usage
+            if (session.RecoveryKey != null)
+            {
+                session.RecoveryKey.UsageCount++;
+                session.RecoveryKey.LastUsedAt = DateTime.Now;
+            }
+            
+            await context.SaveChangesAsync();
+            
+            await LogRecoveryActionAsync("PASSWORD_RESET_COMPLETED", session.TargetUsername, "SYSTEM", 
+                $"Password reset completed for {session.TargetUsername}", session.RecoveryKey?.KeyId);
+            
+            _logger.Information("Password reset completed for {Username} via session {SessionId}", 
+                session.TargetUsername, sessionId);
+            
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "Failed to complete password reset");
+            return false;
+        }
+    }
+    
+    public async Task<bool> ValidateUSBTokenAsync(string tokenData)
+    {
+        try
+        {
+            // Decrypt and validate USB token
+            var decryptedData = DpapiHelper.UnprotectString(tokenData);
+            var tokenInfo = JsonSerializer.Deserialize<USBRecoveryToken>(decryptedData);
+            
+            if (tokenInfo == null) return false;
+            
+            // Check expiry
+            if (tokenInfo.ExpiresAt < DateTime.Now) return false;
+            
+            // Check usage limits
+            if (tokenInfo.IsOneTimeUse && tokenInfo.UsageCount >= 1) return false;
+            if (!tokenInfo.IsOneTimeUse && tokenInfo.UsageCount >= tokenInfo.MaxUsages) return false;
+            
+            return await ValidateRecoveryKeyAsync(tokenInfo.TokenId);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "Failed to validate USB token");
+            return false;
+        }
+    }
+    
+    public async Task<List<EmergencyRecoveryKey>> GetActiveRecoveryKeysAsync()
+    {
+        try
+        {
+            using var context = new LocalDbContext(_connectionString);
+            
+            return await context.EmergencyRecoveryKeys
+                .Where(k => k.IsActive && (!k.ExpiresAt.HasValue || k.ExpiresAt > DateTime.Now))
+                .OrderByDescending(k => k.CreatedAt)
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "Failed to get active recovery keys");
+            return new List<EmergencyRecoveryKey>();
+        }
+    }
+    
+    public async Task<bool> RevokeRecoveryKeyAsync(string keyId, string revokedBy, string reason = "Manual revocation")
+    {
+        try
+        {
+            using var context = new LocalDbContext(_connectionString);
+            
+            var key = await context.EmergencyRecoveryKeys
+                .FirstOrDefaultAsync(k => k.KeyId == keyId);
+                
+            if (key == null) return false;
+            
+            key.IsActive = false;
+            await context.SaveChangesAsync();
+            
+            await LogRecoveryActionAsync("RECOVERY_KEY_REVOKED", null, revokedBy, 
+                $"Recovery key {keyId} revoked: {reason}", keyId);
+            
+            _logger.Information("Recovery key revoked: {KeyId} by {RevokedBy}", keyId, revokedBy);
+            
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "Failed to revoke recovery key");
+            return false;
+        }
+    }
+    
+    public async Task<List<RecoveryAuditLog>> GetRecoveryAuditLogsAsync(DateTime? fromDate = null, DateTime? toDate = null)
+    {
+        try
+        {
+            using var context = new LocalDbContext(_connectionString);
+            
+            var query = context.RecoveryAuditLogs.AsQueryable();
+            
+            if (fromDate.HasValue)
+                query = query.Where(l => l.PerformedAt >= fromDate);
+                
+            if (toDate.HasValue)
+                query = query.Where(l => l.PerformedAt <= toDate);
+            
+            return await query
+                .OrderByDescending(l => l.PerformedAt)
+                .Take(1000)
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "Failed to get recovery audit logs");
+            return new List<RecoveryAuditLog>();
+        }
+    }
+    
+    private async Task LogRecoveryActionAsync(string action, string? targetUsername, string performedBy, 
+        string details, string? recoveryKeyId = null)
+    {
+        try
+        {
+            using var context = new LocalDbContext(_connectionString);
+            
+            var auditLog = new RecoveryAuditLog
+            {
+                Action = action,
+                TargetUsername = targetUsername,
+                PerformedBy = performedBy,
+                Details = details,
+                RecoveryKeyId = recoveryKeyId,
+                DeviceId = Environment.MachineName
+            };
+            
+            context.RecoveryAuditLogs.Add(auditLog);
+            await context.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "Failed to log recovery action");
+        }
+    }
+    
+    private string GenerateKeyId(string prefix = "MK")
+    {
+        var timestamp = DateTime.Now.ToString("yyyyMMddHHmm");
+        var random = Random.Shared.Next(1000, 9999);
+        return $"{prefix}-{timestamp}-{random}";
+    }
+}
+
+public class PasswordHasher
+{
+    public static (string hash, string salt) HashPassword(string password)
+    {
+        // Generate a random salt
+        var saltBytes = new byte[32];
+        using (var rng = RandomNumberGenerator.Create())
+        {
+            rng.GetBytes(saltBytes);
+        }
+        
+        var salt = Convert.ToBase64String(saltBytes);
+        
+        // Hash the password with Argon2
+        var argon2 = new Konscious.Security.Cryptography.Argon2id(Encoding.UTF8.GetBytes(password))
+        {
+            Salt = saltBytes,
+            DegreeOfParallelism = 4,
+            Iterations = 3,
+            MemorySize = 65536 // 64 MB
+        };
+        
+        var hashBytes = argon2.GetBytes(32);
+        var hash = Convert.ToBase64String(hashBytes);
+        
+        return (hash, salt);
+    }
+    
+    public static bool VerifyPassword(string password, string hash, string salt)
+    {
+        try
+        {
+            var saltBytes = Convert.FromBase64String(salt);
+            var hashBytes = Convert.FromBase64String(hash);
+            
+            var argon2 = new Konscious.Security.Cryptography.Argon2id(Encoding.UTF8.GetBytes(password))
+            {
+                Salt = saltBytes,
+                DegreeOfParallelism = 4,
+                Iterations = 3,
+                MemorySize = 65536
+            };
+            
+            var computedHashBytes = argon2.GetBytes(32);
+            
+            return hashBytes.SequenceEqual(computedHashBytes);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+}

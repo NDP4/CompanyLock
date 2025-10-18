@@ -2,7 +2,7 @@
 
 ## 🎯 Overview
 
-Berdasarkan permintaan Anda, saya telah menambahkan fitur log management yang komprehensif untuk AdminTool dan sistem automatic cleanup untuk mencegah database bloat.
+menambahkan fitur log management yang komprehensif untuk AdminTool dan sistem automatic cleanup untuk mencegah database bloat.
 
 ## ✨ Fitur-Fitur Baru
 
