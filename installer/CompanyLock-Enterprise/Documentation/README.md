@@ -1,6 +1,6 @@
-# 🔒 CompanyLock Enterprise Security System
+# 🔒 CompanyLock - Sistem Keamanan Perusahaan Offline
 
-**CompanyLock** adalah solusi keamanan workstation enterprise berbasis offline yang dirancang khusus untuk lingkungan korporat modern. Sistem ini menyediakan autentikasi lokal tingkat enterprise, monitoring aktivitas real-time, dan kontrol akses komprehensif tanpa memerlukan koneksi internet.
+**CompanyLock** adalah solusi keamanan workstation berbasis offline yang dirancang khusus untuk lingkungan perusahaan. Sistem ini menyediakan autentikasi lokal, monitoring aktivitas, dan kontrol akses yang komprehensif tanpa memerlukan koneksi internet.
 
 [![.NET Version](https://img.shields.io/badge/.NET-8.0-blue.svg)](https://dotnet.microsoft.com/download/dotnet/8.0)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)

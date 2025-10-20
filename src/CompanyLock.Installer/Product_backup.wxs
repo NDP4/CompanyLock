@@ -1,0 +1,84 @@
+&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"&gt;
+  &lt;Package Id="*" 
+           Name="CompanyLock Security System" 
+           Language="1033" 
+           Version="1.0.0.0" 
+           Manufacturer="CompanyLock Corporation"
+           UpgradeCode="12345678-1234-1234-1234-123456789ABC"&gt;
+    
+    &lt;SummaryInformation Description="CompanyLock Offline Security System Installer" /&gt;
+    
+    &lt;MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." /&gt;
+    
+    &lt;MediaTemplate EmbedCab="yes" /&gt;
+    
+    &lt;Feature Id="ProductFeature" Title="CompanyLock" Level="1"&gt;
+      &lt;ComponentGroupRef Id="ProductComponents" /&gt;
+      &lt;ComponentRef Id="ConfigComponent" /&gt;
+      &lt;ComponentRef Id="ServiceComponent" /&gt;
+    &lt;/Feature&gt;
+    
+    &lt;Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" /&gt;
+    &lt;UIRef Id="WixUI_InstallDir" /&gt;
+  &lt;/Package&gt;
+  
+  &lt;Fragment&gt;
+    &lt;Directory Id="TARGETDIR" Name="SourceDir"&gt;
+      &lt;Directory Id="ProgramFilesFolder"&gt;
+        &lt;Directory Id="INSTALLFOLDER" Name="CompanyLock" /&gt;
+      &lt;/Directory&gt;
+      &lt;Directory Id="CommonAppDataFolder"&gt;
+        &lt;Directory Id="CONFIGFOLDER" Name="CompanyLock" /&gt;
+      &lt;/Directory&gt;
+    &lt;/Directory&gt;
+  &lt;/Fragment&gt;
+  
+  &lt;Fragment&gt;
+    &lt;ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER"&gt;
+      &lt;Component Id="AgentComponent"&gt;
+        &lt;File Id="AgentExe" Source="$(var.CompanyLock.Agent.TargetPath)" /&gt;
+        &lt;File Id="AgentPdb" Source="$(var.CompanyLock.Agent.TargetPdb)" /&gt;
+      &lt;/Component&gt;
+      
+      &lt;Component Id="UIComponent"&gt;
+        &lt;File Id="UIExe" Source="$(var.CompanyLock.UI.TargetPath)" /&gt;
+        &lt;File Id="UIPdb" Source="$(var.CompanyLock.UI.TargetPdb)" /&gt;
+      &lt;/Component&gt;
+      
+      &lt;Component Id="AdminToolComponent"&gt;
+        &lt;File Id="AdminToolExe" Source="$(var.CompanyLock.AdminTool.TargetPath)" /&gt;
+        &lt;File Id="AdminToolPdb" Source="$(var.CompanyLock.AdminTool.TargetPdb)" /&gt;
+      &lt;/Component&gt;
+      
+      &lt;Component Id="CoreLibraries"&gt;
+        &lt;File Id="CoreDll" Source="$(var.CompanyLock.Agent.TargetDir)CompanyLock.Core.dll" /&gt;
+        &lt;File Id="LocalAuthDll" Source="$(var.CompanyLock.Agent.TargetDir)CompanyLock.LocalAuth.dll" /&gt;
+      &lt;/Component&gt;
+    &lt;/ComponentGroup&gt;
+    
+    &lt;Component Id="ConfigComponent" Directory="CONFIGFOLDER"&gt;
+      &lt;File Id="ConfigFile" Source="config.json" /&gt;
+      &lt;CreateFolder /&gt;
+    &lt;/Component&gt;
+    
+    &lt;Component Id="ServiceComponent" Directory="INSTALLFOLDER"&gt;
+      &lt;ServiceInstall Id="CompanyLockService"
+                      Type="ownProcess"
+                      Name="CompanyLockService"
+                      DisplayName="CompanyLock Agent Service"
+                      Description="CompanyLock security and access control service"
+                      Start="auto"
+                      Account="LocalSystem"
+                      ErrorControl="normal"
+                      Interactive="no" /&gt;
+      
+      &lt;ServiceControl Id="StartService"
+                      Name="CompanyLockService"
+                      Start="install"
+                      Stop="both"
+                      Remove="uninstall"
+                      Wait="yes" /&gt;
+    &lt;/Component&gt;
+  &lt;/Fragment&gt;
+&lt;/Wix&gt;

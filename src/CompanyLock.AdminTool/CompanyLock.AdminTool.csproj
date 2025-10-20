@@ -7,6 +7,23 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <Platforms>AnyCPU;x64;x86</Platforms>
+    
+    <!-- Self-contained deployment configuration -->
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <PublishTrimmed>false</PublishTrimmed>
+    
+    <!-- Application metadata -->
+    <AssemblyTitle>CompanyLock AdminTool</AssemblyTitle>
+    <AssemblyDescription>CompanyLock Enterprise Security - Administration Tool</AssemblyDescription>
+    <ApplicationIcon>..\..\assets\icons\CompanyLock.ico</ApplicationIcon>
+    <AssemblyCompany>CompanyLock Security</AssemblyCompany>
+    <AssemblyProduct>CompanyLock AdminTool</AssemblyProduct>
+    <AssemblyCopyright>Copyright © 2024</AssemblyCopyright>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>

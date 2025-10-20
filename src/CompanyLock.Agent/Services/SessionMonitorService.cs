@@ -83,13 +83,28 @@ public class SessionMonitorService
     {
         try
         {
-            // Get the path to the UI executable
+            // Get the path to the UI executable - try multiple locations
             var currentDir = AppDomain.CurrentDomain.BaseDirectory;
-            var uiPath = Path.Combine(currentDir, "CompanyLock.UI.exe");
+            string[] possiblePaths = {
+                @"C:\Program Files\CompanyLock\UI\CompanyLock.UI.exe", // Production: Absolute path for Ghost Spectre compatibility
+                Path.Combine(currentDir, "..", "UI", "CompanyLock.UI.exe"), // Production: Relative path
+                Path.Combine(currentDir, "CompanyLock.UI.exe"), // Same folder
+                Path.Combine(currentDir, "..\\..\\..\\..\\CompanyLock.UI\\bin\\Debug\\net8.0-windows\\CompanyLock.UI.exe") // Development
+            };
             
-            if (!File.Exists(uiPath))
+            string? uiPath = null;
+            foreach (var path in possiblePaths)
             {
-                _logger.Error("UI executable not found at {UiPath}", uiPath);
+                if (File.Exists(path))
+                {
+                    uiPath = path;
+                    break;
+                }
+            }
+            
+            if (string.IsNullOrEmpty(uiPath))
+            {
+                _logger.Error("UI executable not found. Tried paths: {Paths}", string.Join(", ", possiblePaths));
                 return;
             }
             

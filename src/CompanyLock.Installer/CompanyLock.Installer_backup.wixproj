@@ -1,0 +1,22 @@
+&lt;Project Sdk="WixToolset.Sdk/4.0.0"&gt;
+
+  &lt;PropertyGroup&gt;
+    &lt;TargetFramework&gt;net8.0&lt;/TargetFramework&gt;
+    &lt;OutputType&gt;Package&lt;/OutputType&gt;
+    &lt;Platforms&gt;x64;x86&lt;/Platforms&gt;
+  &lt;/PropertyGroup&gt;
+
+  &lt;PropertyGroup&gt;
+    &lt;ProductName&gt;CompanyLock Security System&lt;/ProductName&gt;
+    &lt;ProductVersion&gt;1.0.0&lt;/ProductVersion&gt;
+    &lt;Manufacturer&gt;CompanyLock Corporation&lt;/Manufacturer&gt;
+    &lt;PackageDescription&gt;Offline computer security and access control system&lt;/PackageDescription&gt;
+  &lt;/PropertyGroup&gt;
+
+  &lt;ItemGroup&gt;
+    &lt;ProjectReference Include="..\CompanyLock.Agent\CompanyLock.Agent.csproj" /&gt;
+    &lt;ProjectReference Include="..\CompanyLock.UI\CompanyLock.UI.csproj" /&gt;
+    &lt;ProjectReference Include="..\CompanyLock.AdminTool\CompanyLock.AdminTool.csproj" /&gt;
+  &lt;/ItemGroup&gt;
+
+&lt;/Project&gt;

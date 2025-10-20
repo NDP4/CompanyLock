@@ -64,6 +64,9 @@ public class AgentWorker : BackgroundService
             _logger.Information("Starting automatic log cleanup service (30 days retention)");
             _ = Task.Run(() => _logCleanup.StartAsync(stoppingToken), stoppingToken);
             
+            // Check if system recently booted and auto-lock if needed
+            await CheckAndPerformStartupLock();
+            
             Console.WriteLine("[CompanyLock] Security monitoring active - Hotkey: Ctrl+Alt+L | Idle timeout: 1 minute");
             Console.WriteLine("[CompanyLock] Automatic log cleanup enabled - 30 days retention");
             
@@ -243,8 +246,33 @@ public class AgentWorker : BackgroundService
             }
             
             // Launch the UI application to show lock screen
-            var uiPath = Path.Combine(AppContext.BaseDirectory, "..\\..\\..\\..\\CompanyLock.UI\\bin\\Debug\\net8.0-windows\\CompanyLock.UI.exe");
-            if (File.Exists(uiPath))
+            // Try multiple possible locations for UI executable
+            string[] possiblePaths = {
+                @"C:\Program Files\CompanyLock\UI\CompanyLock.UI.exe", // Production: Absolute path for Ghost Spectre compatibility
+                Path.Combine(AppContext.BaseDirectory, "..", "UI", "CompanyLock.UI.exe"), // Production: Relative path
+                Path.Combine(AppContext.BaseDirectory, "CompanyLock.UI.exe"), // Same folder
+                Path.Combine(AppContext.BaseDirectory, "..\\..\\..\\..\\CompanyLock.UI\\bin\\Debug\\net8.0-windows\\CompanyLock.UI.exe") // Development
+            };
+            
+            string? uiPath = null;
+            foreach (var path in possiblePaths)
+            {
+                _logger.Debug("Trying UI path: {Path}", path);
+                Console.WriteLine($"[CompanyLock] Trying UI path: {path}");
+                if (File.Exists(path))
+                {
+                    uiPath = path;
+                    _logger.Information("Found UI executable at: {Path}", path);
+                    Console.WriteLine($"[CompanyLock] Found UI at: {path}");
+                    break;
+                }
+                else
+                {
+                    Console.WriteLine($"[CompanyLock] UI not found at: {path}");
+                }
+            }
+            
+            if (!string.IsNullOrEmpty(uiPath))
             {
                 var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                 {
@@ -307,6 +335,54 @@ public class AgentWorker : BackgroundService
         }
     }
     
+    private async Task CheckAndPerformStartupLock()
+    {
+        try
+        {
+            // Check system uptime to determine if this is a recent boot
+            var uptime = GetSystemUptime();
+            _logger.Information("System uptime: {Uptime} minutes", uptime.TotalMinutes);
+            
+            // If system uptime is less than 5 minutes, consider it a fresh boot
+            if (uptime.TotalMinutes < 5)
+            {
+                _logger.Information("Recent system boot detected - performing startup lock");
+                Console.WriteLine("[CompanyLock] Fresh system boot detected - activating security lock");
+                
+                // Wait a moment for system to stabilize
+                await Task.Delay(2000);
+                
+                // Trigger lock screen
+                await TriggerLockScreen("startup_lock");
+            }
+            else
+            {
+                _logger.Information("System has been running for {Minutes} minutes - no startup lock needed", 
+                    uptime.TotalMinutes);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "Failed to check startup lock status - continuing normal operation");
+        }
+    }
+    
+    private TimeSpan GetSystemUptime()
+    {
+        try
+        {
+            // Get system uptime using Environment.TickCount
+            // TickCount is milliseconds since system started
+            var uptimeMs = Environment.TickCount;
+            return TimeSpan.FromMilliseconds(uptimeMs);
+        }
+        catch
+        {
+            // Fallback - assume system has been up for a while
+            return TimeSpan.FromHours(1);
+        }
+    }
+
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
         _logger.Information("CompanyLock Agent Service stopping...");

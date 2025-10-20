@@ -16,6 +16,25 @@ bld/
 [Oo]bj/
 [Ll]og/
 
+# ===================================
+# CompanyLock Distribution Files
+# ===================================
+
+# Large executable files (>100MB)
+*.exe
+installer/**/Agent/*.exe
+installer/**/AdminTool/*.exe
+installer/**/UI/*.exe
+
+# Distribution packages
+*.zip
+CompanyLock-Enterprise-*.zip
+CompanyLock-*.zip
+
+# Temporary distribution folders
+dist/
+temp/
+
 # Visual Studio 2015/2017 cache/options directory
 .vs/
 # Uncomment if you have tasks that create the project's static files in wwwroot

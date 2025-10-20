@@ -29,7 +29,7 @@ public class IdleMonitorService
     public IdleMonitorService()
     {
         _logger = Core.Logging.LoggerFactory.GetLogger();
-        _idleTimeoutMs = 60000; // 1 minute (production setting)
+        _idleTimeoutMs = 30000; // 30 seconds (testing setting)
         _idleTimer = new System.Timers.Timer();
         _idleTimer.Interval = 5000; // Check every 5 seconds
         _idleTimer.Elapsed += CheckIdleStatus;
@@ -51,7 +51,7 @@ public class IdleMonitorService
             _idleTimer.Start();
             _isMonitoring = true;
             _logger.Information("Idle monitor started - Timeout: {TimeoutMs}ms, Check interval: {IntervalMs}ms", _idleTimeoutMs, _idleTimer.Interval);
-            Console.WriteLine($"[IdleMonitor] Started - 1 minute timeout");
+            Console.WriteLine($"[IdleMonitor] Started - 30 seconds timeout");
         }
         catch (Exception ex)
         {
